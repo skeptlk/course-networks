@@ -51,6 +51,8 @@ class MyTCPProtocol(UDPBasedProtocol):
         self.id = 1
         self.ack = 0
 
+        self.TICK = 0.00001
+
         self.time = 0
         self.last_sent_time = 0
 
@@ -68,14 +70,13 @@ class MyTCPProtocol(UDPBasedProtocol):
 
     def working_thread(self):
         while not self.halt:
-
             try:
                 data = self.recvfrom(self.buffer_size)
                 packet = Packet.load(data)
                 if packet.id not in self.used_ids:
                     # detect packet loss here: 
                     if self.id - packet.ack != 1:
-                        print(self.name, "Packet loss!", self.id, packet.ack)
+                        # if lost packets were already queued, no not add them again
                         lost_packets = list(filter(lambda x: x.id > packet.ack, self.sent_packets))
                         for p in lost_packets:
                             p.ack = self.ack
@@ -89,60 +90,30 @@ class MyTCPProtocol(UDPBasedProtocol):
 
             if len(self.send_queue) > 0:
                 packet = self.send_queue.pop()
+                packet.ack = self.ack
                 self.sendto(packet.serialize())
                 self.sent_packets.append(packet)
                 self.last_sent_time = self.time
-                self.id += 1
 
-            # print(self.name, "Queue: ", len(self.send_queue))
-            self.time += 0.00001
+            self.time += self.TICK
 
-            if self.time - self.last_sent_time >= 1000 * 0.00001:
+            if self.time - self.last_sent_time >= 100 * self.TICK:
                 self.send_queue.append(self.sent_packets[len(self.sent_packets) - 1])
 
-            time.sleep(0.00001)
-
-    # def send_ack(self):
-    #     self.send(b'')
-    #     print(self.name, "timer!", self.id, self.ack)
+            time.sleep(self.TICK)
 
     def send(self, data: bytes):
         packet = Packet(data, self.id, self.ack)
+        self.id += 1
         self.send_queue.append(packet)
 
         print(self.name, "Sending packet, id=", self.id)
         return len(data) + 4
-    
-    # def send_lost(self, start_id):
-    #     packets_to_send = filter(lambda x: x.id >= start_id, self.sent_packets)
-    #     for packet in packets_to_send:        
-    #         print(self.name, "Sending lost, id=", packet.id)
-    #         self.sendto(packet.serialize())
 
     def recv(self, n: int):
         while len(self.recv_queue) == 0:
-            time.sleep(0.00001)
+            time.sleep(self.TICK)
         packet = self.recv_queue.pop()
         print(self.name, "Recv!", packet.id)
         return packet.data
-        # while True:
-        #     data = self.recvfrom(self.buffer_size)
-        #     packet = Packet.load(data)
-        #     if packet.id not in self.used_ids:
-        #         self.used_ids.add(packet.id)
-        #         if self.id - packet.ack != 1:
-        #             print(self.name, "PACKET LOSS DETECTED! id=", packet.id, " ack=", self.ack)
-        #             self.send_lost(packet.ack + 1)
-        #         else:
-        #             if len(packet.data) == 0:
-        #                 print(self.name, "received empty ack! ")
-        #                 self.send_lost(packet.ack + 1)
-        #             else:
-        #                 print(self.name, "received in-order packet: id=", packet.id, " ack=", self.ack)
-        #                 self.ack = packet.id
-
-        #         if len(packet.data) == 0:
-        #             continue
-
-        #         return packet.data
 
