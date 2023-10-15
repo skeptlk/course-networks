@@ -63,11 +63,11 @@ def setup_netem(packet_loss, duplicate, reorder):
 #     setup_netem(packet_loss=0.0, duplicate=0.0, reorder=0.0)
 #     run_echo_test(iterations=iterations, msg_size=11)
 
-@pytest.mark.parametrize("iterations", [1000])
-@pytest.mark.timeout(10)
-def test_small_loss(iterations):
-    setup_netem(packet_loss=0.02, duplicate=0.0, reorder=0.0)
-    run_echo_test(iterations=iterations, msg_size=14)
+# @pytest.mark.parametrize("iterations", [1000])
+# @pytest.mark.timeout(10)
+# def test_small_loss(iterations):
+#     setup_netem(packet_loss=0.02, duplicate=0.0, reorder=0.0)
+#     run_echo_test(iterations=iterations, msg_size=14)
 
 # @pytest.mark.parametrize("iterations", [10, 100, 1000, 5000])
 # @pytest.mark.timeout(5)
@@ -75,11 +75,11 @@ def test_small_loss(iterations):
 #     setup_netem(packet_loss=0.0, duplicate=0.02, reorder=0.0)
 #     run_echo_test(iterations=iterations, msg_size=14)
 
-# @pytest.mark.parametrize("iterations", [100])
-# @pytest.mark.timeout(20)
-# def test_high_loss(iterations):
-#     setup_netem(packet_loss=0.1, duplicate=0.0, reorder=0.0)
-#     run_echo_test(iterations=iterations, msg_size=17)
+@pytest.mark.parametrize("iterations", [1000])
+@pytest.mark.timeout(20)
+def test_high_loss(iterations):
+    setup_netem(packet_loss=0.1, duplicate=0.0, reorder=0.0)
+    run_echo_test(iterations=iterations, msg_size=17)
 
 
 # @pytest.mark.parametrize("iterations", [10, 100, 1000])

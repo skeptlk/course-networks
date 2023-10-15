@@ -2,6 +2,7 @@ from typing import List, Set
 import threading
 import socket
 import time
+import sys
 
 
 def int_to_bytepair(n: int) -> bytes:
@@ -51,6 +52,8 @@ class MyTCPProtocol(UDPBasedProtocol):
         self.id = 1
         self.ack = 0
 
+        self.last_ack = None
+
         self.TICK = 0.00001
 
         self.time = 0
@@ -77,15 +80,14 @@ class MyTCPProtocol(UDPBasedProtocol):
                     # detect packet loss here: 
                     if self.id - packet.ack != 1:
                         # if lost packets were already queued, no not add them again
-                        lost_packets = list(filter(lambda x: x.id > packet.ack, self.sent_packets))
-                        for p in lost_packets:
-                            p.ack = self.ack
-                        self.send_queue = lost_packets + self.send_queue
+                        self.send_lost_packets(packet.ack)
                     else:
                         self.used_ids.add(packet.id)
                         self.recv_queue.append(packet)
                         self.ack = packet.id
-            except:
+
+                self.last_ack = packet.ack
+            except: 
                 pass
 
             if len(self.send_queue) > 0:
@@ -97,17 +99,28 @@ class MyTCPProtocol(UDPBasedProtocol):
 
             self.time += self.TICK
 
-            if self.time - self.last_sent_time >= 100 * self.TICK:
-                self.send_queue.append(self.sent_packets[len(self.sent_packets) - 1])
+            if self.time - self.last_sent_time >= 500 * self.TICK:
+                last = self.sent_packets[len(self.sent_packets) - 1]
+                print(self.name, ' timout: resending last packet (last ack = ' + str(self.last_ack) + ')', flush=True)
+                self.send_queue.append(last)
 
             time.sleep(self.TICK)
 
+    def send_lost_packets(self, ack: int):
+        id_to_send = sys.maxsize if len(self.send_queue) == 0 else self.send_queue[0].id
+        
+        lost_packets = list(filter(lambda x: x.id > ack and x.id < id_to_send, self.sent_packets))
+        
+        for p in lost_packets:
+            p.ack = self.ack
+        self.send_queue = lost_packets + self.send_queue
+    
     def send(self, data: bytes):
         packet = Packet(data, self.id, self.ack)
-        self.id += 1
         self.send_queue.append(packet)
-
         print(self.name, "Sending packet, id=", self.id)
+        
+        self.id += 1
         return len(data) + 4
 
     def recv(self, n: int):
