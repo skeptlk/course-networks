@@ -34,6 +34,9 @@ class Packet:
     def serialize(self) -> bytes:
         return int_to_bytepair(self.id) + int_to_bytepair(self.ack) + self.data
     
+    def is_empty(self) -> bool:
+        return len(self.data) == 0
+    
     @classmethod
     def load(cls, data: bytes):
         id = bytepair_to_int(data[:2])
@@ -54,7 +57,7 @@ class MyTCPProtocol(UDPBasedProtocol):
 
         self.last_ack = None
 
-        self.TICK = 0.00001
+        self.TICK = 0.000001
 
         self.time = 0
         self.last_sent_time = 0
@@ -83,10 +86,12 @@ class MyTCPProtocol(UDPBasedProtocol):
                         self.send_lost_packets(packet.ack)
                     else:
                         self.used_ids.add(packet.id)
-                        self.recv_queue.append(packet)
+                        if len(packet.data):
+                            self.recv_queue.append(packet)
                         self.ack = packet.id
 
                 self.last_ack = packet.ack
+
             except: 
                 pass
 
@@ -99,12 +104,24 @@ class MyTCPProtocol(UDPBasedProtocol):
 
             self.time += self.TICK
 
-            if self.time - self.last_sent_time >= 500 * self.TICK:
+            if self.time - self.last_sent_time >= 5 * self.TICK and len(self.sent_packets) > 0:
                 last = self.sent_packets[len(self.sent_packets) - 1]
-                print(self.name, ' timout: resending last packet (last ack = ' + str(self.last_ack) + ')', flush=True)
-                self.send_queue.append(last)
+                if (last.id != self.last_ack or self.last_ack is None) and not last.is_empty():
+                    # print(self.name, 'resending last packet', flush=True)
+                    self.send_queue.append(last)
+
+            if self.time - self.last_sent_time >= 50 * self.TICK:
+                if len(self.send_queue) == 0:
+                    self.send_acknowledgement()
 
             time.sleep(self.TICK)
+
+    def send_acknowledgement(self):
+        packet = Packet(b'', self.id, self.ack)
+        self.send_queue.append(packet)
+        print(self.name, "Sending empty ack, id=", self.id)
+        self.id += 1
+        return 4
 
     def send_lost_packets(self, ack: int):
         id_to_send = sys.maxsize if len(self.send_queue) == 0 else self.send_queue[0].id

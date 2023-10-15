@@ -23,9 +23,8 @@ def run_echo_test(iterations, msg_size):
     a_addr = ('127.0.0.1', generate_port())
     b_addr = ('127.0.0.1', generate_port())
 
-
-    a = MyTCPProtocol(name='a', local_addr=a_addr, remote_addr=b_addr)
-    b = MyTCPProtocol(name='b', local_addr=b_addr, remote_addr=a_addr)
+    a = MyTCPProtocol(name='A', local_addr=a_addr, remote_addr=b_addr)
+    b = MyTCPProtocol(name='B', local_addr=b_addr, remote_addr=a_addr)
 
     client = EchoClient(a, iterations=iterations, msg_size=msg_size)
     server = EchoServer(b, iterations=iterations, msg_size=msg_size)
@@ -75,10 +74,10 @@ def setup_netem(packet_loss, duplicate, reorder):
 #     setup_netem(packet_loss=0.0, duplicate=0.02, reorder=0.0)
 #     run_echo_test(iterations=iterations, msg_size=14)
 
-@pytest.mark.parametrize("iterations", [1000])
+@pytest.mark.parametrize("iterations", [10, 100, 1000])
 @pytest.mark.timeout(20)
 def test_high_loss(iterations):
-    setup_netem(packet_loss=0.1, duplicate=0.0, reorder=0.0)
+    setup_netem(packet_loss=0.2, duplicate=0.0, reorder=0.0)
     run_echo_test(iterations=iterations, msg_size=17)
 
 
