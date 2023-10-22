@@ -66,6 +66,8 @@ class MyTCPProtocol(UDPBasedProtocol):
 
         self.halt = False
 
+        self.verbose = False
+
         self.thread = threading.Thread(target=self.working_thread)
         self.thread.start()
 
@@ -107,7 +109,6 @@ class MyTCPProtocol(UDPBasedProtocol):
             if self.time - self.last_sent_time >= 5 * self.TICK and len(self.sent_packets) > 0:
                 last = self.sent_packets[len(self.sent_packets) - 1]
                 if (last.id != self.last_ack or self.last_ack is None) and not last.is_empty():
-                    # print(self.name, 'resending last packet', flush=True)
                     self.send_queue.append(last)
 
             if self.time - self.last_sent_time >= 50 * self.TICK:
@@ -119,7 +120,7 @@ class MyTCPProtocol(UDPBasedProtocol):
     def send_acknowledgement(self):
         packet = Packet(b'', self.id, self.ack)
         self.send_queue.append(packet)
-        print(self.name, "Sending empty ack, id=", self.id)
+        self.log("Sending empty ack, id=", self.id)
         self.id += 1
         return 4
 
@@ -132,10 +133,14 @@ class MyTCPProtocol(UDPBasedProtocol):
             p.ack = self.ack
         self.send_queue = lost_packets + self.send_queue
     
+    def log(self, *values: object):
+        if self.verbose:
+            print(self.name, values)
+
     def send(self, data: bytes):
         packet = Packet(data, self.id, self.ack)
         self.send_queue.append(packet)
-        print(self.name, "Sending packet, id=", self.id)
+        self.log("Sending packet, id=", self.id)
         
         self.id += 1
         return len(data) + 4
@@ -144,6 +149,6 @@ class MyTCPProtocol(UDPBasedProtocol):
         while len(self.recv_queue) == 0:
             time.sleep(self.TICK)
         packet = self.recv_queue.pop()
-        print(self.name, "Recv!", packet.id)
+        self.log("Recv!", packet.id)
         return packet.data
 
