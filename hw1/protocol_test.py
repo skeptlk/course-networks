@@ -50,12 +50,11 @@ def setup_netem(packet_loss, duplicate, reorder):
     if current_netem_state == (packet_loss, duplicate, reorder):
         return
     current_netem_state = (packet_loss, duplicate, reorder)
-    delay = 0
+    netem_cmd = f"tc qdisc replace dev lo root netem loss {packet_loss * 100}% duplicate {duplicate * 100}%"
     if reorder > 0:
-        delay = 10
+        netem_cmd += f" reorder {100 - reorder}% delay 10ms"
 
-    os.system(f"tc qdisc replace dev lo root netem loss {packet_loss * 100}% duplicate {duplicate * 100}% reorder {reorder * 100}% delay {delay}ms")
-
+    os.system(netem_cmd)
 
 @pytest.mark.parametrize("iterations", [10, 100, 1000])
 @pytest.mark.timeout(5)
@@ -95,8 +94,8 @@ def test_large_message(msg_size):
     run_echo_test(iterations=2, msg_size=msg_size)
 
 
-# @pytest.mark.parametrize("iterations", [50_00])
-# @pytest.mark.timeout(120)
-# def test_perfomance(iterations):
-#     setup_netem(packet_loss=0.02, duplicate=0.02, reorder=0.01)
-#     run_echo_test(iterations=iterations, msg_size=10)
+@pytest.mark.parametrize("iterations", [50_000])
+@pytest.mark.timeout(120)
+def test_perfomance(iterations):
+    setup_netem(packet_loss=0.02, duplicate=0.02, reorder=0.01)
+    run_echo_test(iterations=iterations, msg_size=10)
