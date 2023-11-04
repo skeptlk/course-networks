@@ -3,7 +3,7 @@ import threading
 import socket
 import time
 import sys
-
+from collections import OrderedDict
 
 def int_to_bytes(n: int, size = 4) -> bytes:
     return n.to_bytes(size, byteorder='little', signed=False)
@@ -31,7 +31,13 @@ class Packet:
         self.id = id
         self.ack = ack
         self.split = split
-    
+
+    def __eq__(self, other):
+        return self.id == other.id
+
+    def __hash__(self):
+        return hash(('id', self.id))
+
     def serialize(self) -> bytes:
         return \
             int_to_bytes(self.id) + \
@@ -85,32 +91,29 @@ class MyTCPProtocol(UDPBasedProtocol):
     def working_thread(self):
         while not self.halt:
             try:
-                ss = 32767 + 9
-                data = self.recvfrom(ss)
+                data = self.recvfrom(32767 + 9)
                 packet = Packet.load(data)
                 if packet.id not in self.used_ids:
-                    # detect packet loss here: 
-                    if self.id - packet.ack != 1:
-                        self.log("Packet loss id=", packet.id,  " ack=", packet.ack, " self-id=", self.id, " self-ack", self.ack)
-                        self.send_lost_packets(packet.ack) 
+                    if packet.id - self.ack != 1:
+                        self.log("Packet loss detected id=", packet.id,  "ack=", self.ack)
+                        self.send_acknowledgement() 
                     else:
-                        if not packet.is_empty():
-                            self.log("received in order: id=", packet.id, " packet_ack=", packet.ack)
-                            self.used_ids.add(packet.id)
-                            if len(packet.data):
-                                self.recv_queue.append(packet)
-                            self.ack = packet.id
+                        if packet.is_empty():
+                            self.log("empty ack =", packet.ack)
+                            self.send_lost_packets(packet.ack)
                         else:
-                            self.log("received empty ack ", packet.id, packet.ack)
+                            self.log("packet in order: p.id=", packet.id, "p.ack=", packet.ack)
+                            self.used_ids.add(packet.id)
+                            self.recv_queue.append(packet)
+                            self.ack = packet.id
                 else:
                     self.log("Got duplicate! id=", packet.id, packet.ack)
                 self.last_ack = packet.ack
-            except: 
+            except Exception:
                 pass
 
             while len(self.send_queue) > 0:
                 packet = self.send_queue.pop()
-                self.log("Unqueue: ", packet.id)
                 packet.ack = self.ack
                 self.sendto(packet.serialize())
                 self.sent_packets.append(packet)
@@ -122,7 +125,7 @@ class MyTCPProtocol(UDPBasedProtocol):
                 last = self.sent_packets[-1]
                 if (last.id != self.last_ack or self.last_ack is None) and not last.is_empty():
                     self.send_queue.append(last)
-                    self.log("adding last... id =", last.id)
+                    self.log("adding last id =", last.id)
 
             if self.time - self.last_sent_time >= 50 * self.TICK:
                 if len(self.send_queue) == 0:
@@ -131,23 +134,24 @@ class MyTCPProtocol(UDPBasedProtocol):
             time.sleep(self.TICK)
 
     def send_acknowledgement(self):
+        self.log("Sending empty ack=", self.ack, "id=", self.id)
         packet = Packet(b'', self.id, self.ack)
         self.send_queue.append(packet)
-        self.log("Sending empty ack, id=", self.id)
-        # self.id += 1
         return 9
 
     def send_lost_packets(self, ack: int):
         id_to_send = sys.maxsize if len(self.send_queue) == 0 else self.send_queue[0].id
         
         # if lost packets were already queued, do not add them again
-        lost_packets = list(filter(lambda x: x.id > ack and x.id < id_to_send, self.sent_packets))
+        lost_packets = list(filter(lambda x: x.id > ack and x.id < id_to_send and not x.is_empty(), self.sent_packets))
+        lost_packets = list(OrderedDict.fromkeys(lost_packets))
         
+        self.log("Queue before adding lost: ", [p.id for p in self.send_queue])
         for p in lost_packets:
-            self.log("Queue before adding lost: ", [p.id for p in self.send_queue])
-            self.log("Adding lost packet: id=", p.id)
             p.ack = self.ack
         self.send_queue = lost_packets + self.send_queue
+
+        self.log("Queue after: ", [p.id for p in self.send_queue])
     
     def log(self, *values: object):
         if self.verbose:
@@ -175,13 +179,13 @@ class MyTCPProtocol(UDPBasedProtocol):
         # join split sequence together
         if self.recv_queue[-1].split == 0:
             packet = self.recv_queue.pop()
-            self.log("Recv!", packet.id, "Size =", len(packet.data))
+            # self.log("Recv!", packet.id)
             return packet.data
         data = b''
         while len(self.recv_queue) > 0 and self.recv_queue[-1].split != 0:
             packet = self.recv_queue.pop()
             data = packet.data + data
-        self.log("Sending data: ", len(data))
+        # self.log("Sending data: ", len(data))
         return data
 
 
